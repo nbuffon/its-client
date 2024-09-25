@@ -10,13 +10,16 @@
  * Software description: This Intelligent Transportation Systems (ITS) [MQTT](https://mqtt.org/) library based on the [JSon](https://www.json.org) [ETSI](https://www.etsi.org/committee/its) specification transcription provides a ready to connect project for the mobility (connected and autonomous vehicles, road side units, vulnerable road users,...).
  */
 
+use std::fs::File;
+use std::io::Read;
 use std::time::Duration;
 
 use opentelemetry::global::BoxedSpan;
 use opentelemetry::propagation::{Extractor, TextMapPropagator};
-use opentelemetry::trace::{Link, TraceContextExt, Tracer};
+use opentelemetry::trace::{Link, TraceContextExt, TraceError, Tracer};
 use opentelemetry::{global, Context, KeyValue};
-use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::{HttpExporterBuilder, WithExportConfig};
+use opentelemetry_sdk::export::trace::SpanExporter;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace::{
@@ -27,44 +30,47 @@ use reqwest::header;
 
 use crate::client::configuration::telemetry_configuration::TelemetryConfiguration;
 
+fn http_exporter_from_configuration(configuration: &TelemetryConfiguration) -> HttpExporterBuilder {
+    let mut builder = reqwest::ClientBuilder::new();
+
+    if let Some(basic_auth_header) = &configuration.basic_auth_header() {
+        let mut headers = header::HeaderMap::new();
+        let mut auth_value = header::HeaderValue::try_from(basic_auth_header)
+            .expect("Failed to create header value");
+        auth_value.set_sensitive(true);
+        headers.insert(header::AUTHORIZATION, auth_value);
+        builder = builder.default_headers(headers)
+    }
+
+    if let Some(ca_path) = &configuration.ca_path {
+        let mut buf = Vec::new();
+        File::open(ca_path)
+            .expect("Failed to open certificate file")
+            .read_to_end(&mut buf)
+            .expect("Failed to read certificate");
+        let cert =
+            reqwest::Certificate::from_pem(&buf).expect("Failed to create Certificate from file");
+
+        builder = builder.add_root_certificate(cert).tls_sni(true);
+    }
+
+    let http_client = builder
+        .build()
+        .expect("Failed to create telemetry HTTP client");
+
+    opentelemetry_otlp::new_exporter()
+        .http()
+        .with_http_client(http_client)
+        .with_endpoint(configuration.endpoint())
+        .with_timeout(Duration::from_secs(3))
+}
+
 /// Registers a global TracerProvider with HTTP exporter
 pub fn init_tracer(
     configuration: &TelemetryConfiguration,
     service_name: &'static str,
-) -> Result<(), opentelemetry::trace::TraceError> {
-    let path = if configuration.path.starts_with('/') {
-        configuration.path.clone().as_str()[1..].to_string()
-    } else {
-        configuration.path.clone()
-    };
-
-    // FIXME manage HTTPS
-    let endpoint = format!(
-        "http://{}:{}/{}",
-        configuration.host, configuration.port, path
-    );
-
-    let http_client = match configuration.basic_auth_header() {
-        Some(header) => {
-            let mut headers = header::HeaderMap::new();
-            let mut auth_value =
-                header::HeaderValue::try_from(header).expect("Failed to create header value");
-            auth_value.set_sensitive(true);
-            headers.insert(header::AUTHORIZATION, auth_value);
-            reqwest::ClientBuilder::new()
-                .default_headers(headers)
-                .build()
-                .expect("Failed to create telemetry HTTP client")
-        }
-        None => reqwest::Client::new(),
-    };
-
-    let http_exporter = opentelemetry_otlp::new_exporter()
-        .http()
-        .with_http_client(http_client)
-        .with_endpoint(endpoint)
-        .with_timeout(Duration::from_secs(3))
-        .build_span_exporter()?;
+) -> Result<(), TraceError> {
+    let http_exporter = http_exporter_from_configuration(configuration).build_span_exporter()?;
 
     let batch_processor = BatchSpanProcessor::builder(http_exporter, runtime::Tokio)
         .with_batch_config(

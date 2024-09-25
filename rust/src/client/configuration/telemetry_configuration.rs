@@ -29,6 +29,7 @@ pub struct TelemetryConfiguration {
     pub port: u16,
     pub path: String,
     pub batch_size: usize,
+    pub ca_path: Option<String>,
     username: Option<String>,
     password: Option<String>,
 }
@@ -42,6 +43,22 @@ impl TelemetryConfiguration {
         } else {
             None
         }
+    }
+
+    pub(crate) fn endpoint(&self) -> String {
+        let proto = if self.ca_path.is_some() {
+            "https"
+        } else {
+            "http"
+        };
+
+        let path = if self.path.starts_with('/') {
+            self.path.clone().as_str()[1..].to_string()
+        } else {
+            self.path.clone()
+        };
+
+        format!("{}://{}:{}/{}", proto, self.host, self.port, path)
     }
 }
 
@@ -82,11 +99,23 @@ impl TryFrom<&Properties> for TelemetryConfiguration {
                 None => (None, None),
             };
 
+        let ca_path = match get_optional_from_section::<bool>("use_tls", properties)? {
+            Some(enabled) => {
+                if enabled {
+                    Some(get_mandatory_field::<String>("ca_path", section)?)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+
         let s = TelemetryConfiguration {
             host: get_mandatory_field::<String>("host", section)?,
             port: get_mandatory_field::<u16>("port", section)?,
             path,
             batch_size,
+            ca_path,
             username,
             password,
         };
@@ -141,5 +170,18 @@ port=1234
             telemetry_conf.expect("Failed to create TelemetryConfiguration from config");
         assert_eq!("v1/traces", telemetry_conf.path);
         assert_eq!(2048, telemetry_conf.batch_size);
+    }
+
+    #[test]
+    fn ca_path_mandatory_if_tls_enabled() {
+        let conf = r#"[telemetry]
+host="tel.emetry.com"
+port=1234
+use_tls=true
+"#;
+        let ini = Ini::load_from_str(conf).expect("Failed to load string as Ini");
+
+        let err = TelemetryConfiguration::try_from(ini.section(Some("telemetry")).unwrap());
+        assert!(err.is_err());
     }
 }

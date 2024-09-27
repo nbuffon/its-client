@@ -30,13 +30,19 @@ use crate::transport::mqtt::{configure_tls, configure_transport};
 use crate::client::configuration::telemetry_configuration::{
     TelemetryConfiguration, TELEMETRY_SECTION,
 };
+
 #[cfg(feature = "mobility")]
 use crate::client::configuration::{
     mobility_configuration::{MobilityConfiguration, STATION_SECTION},
     node_configuration::{NodeConfiguration, NODE_SECTION},
 };
 
+#[cfg(feature = "geo_routing")]
+use crate::client::configuration::geo_configuration::{GeoConfiguration, GEO_SECTION};
+
 pub mod configuration_error;
+#[cfg(feature = "geo_routing")]
+pub mod geo_configuration;
 #[cfg(feature = "mobility")]
 pub mod mobility_configuration;
 #[cfg(feature = "mobility")]
@@ -48,6 +54,8 @@ const MQTT_SECTION: &str = "mqtt";
 
 pub struct Configuration {
     pub mqtt_options: MqttOptions,
+    #[cfg(feature = "geo_routing")]
+    pub geo: GeoConfiguration,
     #[cfg(feature = "telemetry")]
     pub telemetry: TelemetryConfiguration,
     #[cfg(feature = "mobility")]
@@ -225,6 +233,11 @@ impl TryFrom<Ini> for Configuration {
             mqtt_options: MqttOptionWrapper::try_from(&mqtt_properties)?
                 .deref()
                 .clone(),
+            #[cfg(feature = "geo_routing")]
+            geo: GeoConfiguration::try_from(&pick_mandatory_section(
+                GEO_SECTION,
+                &mut ini_config,
+            )?)?,
             #[cfg(feature = "telemetry")]
             telemetry: TelemetryConfiguration::try_from(&pick_mandatory_section(
                 TELEMETRY_SECTION,
@@ -265,6 +278,10 @@ host="localhost"
 port=1883
 client_id="com_myapplication"
 
+[geo]
+prefix=sandbox
+suffix=v2x
+
 [node]
 responsibility_enabled=true
 
@@ -294,6 +311,22 @@ type="mec_application"
 host="localhost"
 port=1883
 client_id="com_myapplication"
+"#;
+
+    #[cfg(feature = "mobility")]
+    const MINIMAL_GEO_ROUTING_CONFIGURATION: &str = r#"
+[station]
+id="com_myapplication"
+type="mec_application"
+
+[mqtt]
+host="localhost"
+port=1883
+client_id="com_myapplication"
+
+[geo]
+prefix=sandbox
+suffix=v2x
 "#;
 
     #[cfg(feature = "telemetry")]
@@ -431,9 +464,20 @@ port=5418
 
     #[test]
     #[cfg(feature = "mobility")]
-    #[cfg_attr(feature = "telemetry", should_panic)]
+    #[cfg_attr(any(feature = "telemetry", feature = "geo_routing"), should_panic)]
     fn minimal_mobility_configuration() {
         let ini = Ini::load_from_str(MINIMAL_MOBILITY_CONFIGURATION)
+            .expect("Ini creation should not fail");
+
+        let _ = Configuration::try_from(ini)
+            .expect("Failed to create Configuration with minimal mandatory sections and fields");
+    }
+
+    #[test]
+    #[cfg(feature = "geo_routing")]
+    #[cfg_attr(feature = "telemetry", should_panic)]
+    fn minimal_geo_routing_configuration() {
+        let ini = Ini::load_from_str(MINIMAL_GEO_ROUTING_CONFIGURATION)
             .expect("Ini creation should not fail");
 
         let _ = Configuration::try_from(ini)

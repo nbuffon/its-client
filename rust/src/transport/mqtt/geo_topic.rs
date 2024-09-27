@@ -19,6 +19,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use crate::client::configuration::geo_configuration::GeoConfiguration;
 use crate::client::configuration::Configuration;
 use crate::transport::mqtt::geo_topic::message_type::MessageType;
 use crate::transport::mqtt::geo_topic::queue::Queue;
@@ -43,24 +44,27 @@ pub enum GeoTopicError {
 /// FIXME info messages does not contains the `server` part and it requires if/else management
 #[derive(Clone, Debug, Default)]
 pub struct GeoTopic {
-    project: String,
+    prefix: String,
     queue: Queue,
-    server: String,
+    suffix: String,
     message_type: MessageType,
     uuid: String,
     pub geo_extension: Quadkey,
 }
 
 impl GeoTopic {
-    // FIXME use outside configuration for project & so
-    pub fn denm(component_name: &str, geo_extension: Quadkey) -> Self {
+    pub fn denm(
+        configuration: &GeoConfiguration,
+        component_name: &str,
+        geo_extension: &Quadkey,
+    ) -> Self {
         Self {
-            project: "5GCroCo".to_string(),
+            prefix: String::from(&configuration.prefix),
             queue: Queue::In,
-            server: "v2x".to_string(),
+            suffix: String::from(&configuration.suffix),
             message_type: MessageType::DENM,
             uuid: component_name.to_string(),
-            geo_extension,
+            geo_extension: Quadkey::from(geo_extension),
         }
     }
 
@@ -74,11 +78,11 @@ impl GeoTopic {
 impl Topic for GeoTopic {
     fn as_route(&self) -> String {
         if self.message_type == MessageType::INFO {
-            format!("{}/{}/{}", self.project, self.queue, self.message_type)
+            format!("{}/{}/{}", self.prefix, self.queue, self.message_type)
         } else {
             format!(
                 "{}/{}/{}/{}",
-                self.project, self.queue, self.server, self.message_type
+                self.prefix, self.queue, self.suffix, self.message_type
             )
         }
     }
@@ -86,9 +90,9 @@ impl Topic for GeoTopic {
 
 impl Hash for GeoTopic {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.project.hash(state);
+        self.prefix.hash(state);
         self.queue.hash(state);
-        self.server.hash(state);
+        self.suffix.hash(state);
         self.message_type.hash(state);
         self.uuid.hash(state);
         self.geo_extension.hash(state);
@@ -97,9 +101,9 @@ impl Hash for GeoTopic {
 
 impl PartialEq for GeoTopic {
     fn eq(&self, other: &Self) -> bool {
-        self.project == other.project
+        self.prefix == other.prefix
             && self.queue == other.queue
-            && self.server == other.server
+            && self.suffix == other.suffix
             && self.message_type == other.message_type
             && self.uuid == other.uuid
             && self.geo_extension == other.geo_extension
@@ -148,7 +152,7 @@ impl FromStr for GeoTopic {
                 |mut topic_struct, (i, element)| {
                     match i {
                         // project
-                        0 => topic_struct.project = element.to_string(),
+                        0 => topic_struct.prefix = element.to_string(),
                         // queue
                         1 => topic_struct.queue = Queue::from_str(element)?,
                         // message type
@@ -174,11 +178,11 @@ impl FromStr for GeoTopic {
                 |mut topic_struct, (i, element)| {
                     match i {
                         // project
-                        0 => topic_struct.project = element.to_string(),
+                        0 => topic_struct.prefix = element.to_string(),
                         // queue
                         1 => topic_struct.queue = Queue::from_str(element)?,
                         // server
-                        2 => topic_struct.server = element.to_string(),
+                        2 => topic_struct.suffix = element.to_string(),
                         // message type
                         3 => topic_struct.message_type = MessageType::from_str(element)?,
                         // uuid
@@ -222,9 +226,9 @@ mod tests {
 
         match GeoTopic::from_str(topic_string) {
             Ok(topic) => {
-                assert_eq!(topic.project, "5GCroCo".to_string());
+                assert_eq!(topic.prefix, "5GCroCo".to_string());
                 assert_eq!(topic.queue, Queue::Out);
-                assert_eq!(topic.server, "v2x".to_string());
+                assert_eq!(topic.suffix, "v2x".to_string());
                 assert_eq!(topic.message_type, MessageType::CAM);
                 assert_eq!(topic.uuid, "car_1".to_string());
                 assert_eq!(topic.geo_extension.tiles.len(), 4);
@@ -243,9 +247,9 @@ mod tests {
 
         match GeoTopic::from_str(topic_string) {
             Ok(topic) => {
-                assert_eq!(topic.project, "5GCroCo".to_string());
+                assert_eq!(topic.prefix, "5GCroCo".to_string());
                 assert_eq!(topic.queue, Queue::Out);
-                assert_eq!(topic.server, "v2x".to_string());
+                assert_eq!(topic.suffix, "v2x".to_string());
                 assert_eq!(topic.message_type, MessageType::DENM);
                 assert_eq!(topic.uuid, "wse_app_bcn1".to_string());
                 assert_eq!(topic.geo_extension.tiles.len(), 22);
@@ -260,9 +264,9 @@ mod tests {
 
         match GeoTopic::from_str(topic_string) {
             Ok(topic) => {
-                assert_eq!(topic.project, "5GCroCo".to_string());
+                assert_eq!(topic.prefix, "5GCroCo".to_string());
                 assert_eq!(topic.queue, Queue::Out);
-                assert!(topic.server.is_empty());
+                assert!(topic.suffix.is_empty());
                 assert_eq!(topic.message_type, MessageType::INFO);
                 assert_eq!(topic.uuid, "broker".to_string());
                 assert_eq!(topic.geo_extension.tiles.len(), 0);
@@ -277,9 +281,9 @@ mod tests {
 
         match GeoTopic::from_str(topic_string) {
             Ok(topic) => {
-                assert_eq!(topic.project, "5GCroCo".to_string());
+                assert_eq!(topic.prefix, "5GCroCo".to_string());
                 assert_eq!(topic.queue, Queue::In);
-                assert_eq!(topic.server, "v2x".to_string());
+                assert_eq!(topic.suffix, "v2x".to_string());
                 assert_eq!(topic.message_type, MessageType::CAM);
                 assert_eq!(topic.uuid, "car_1".to_string());
                 assert_eq!(topic.geo_extension.tiles.len(), 4);

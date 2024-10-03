@@ -32,6 +32,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use crate::transport::mqtt::mqtt_router::BoxedReception;
 
 /// Struct holding the result of the output exchanges filter thread initialization
 ///
@@ -371,14 +372,14 @@ where
 
             for event in event_receiver {
                 match router.handle_event(event) {
-                    Some((topic, reception)) => {
+                    Some((topic, (reception, properties))) => {
                         // TODO use the From Trait
                         if reception.is::<Exchange>() {
                             if let Ok(exchange) = reception.downcast::<Exchange>() {
                                 let item = Packet {
                                     topic,
                                     payload: *exchange,
-                                    properties: PublishProperties::default(),
+                                    properties,
                                 };
                                 //assumed clone, we send to 2 channels
                                 match monitoring_sender.send((item.clone(), None)) {
@@ -427,7 +428,7 @@ where
 
 fn deserialize<T>(
     publish: rumqttc::v5::mqttbytes::v5::Publish,
-) -> Option<Box<dyn Any + 'static + Send>>
+) -> Option<BoxedReception>
 where
     T: DeserializeOwned + Payload + 'static + Send,
 {
@@ -438,7 +439,7 @@ where
             match serde_json::from_str::<T>(message_str) {
                 Ok(message) => {
                     trace!("message parsed");
-                    return Some(Box::new(message));
+                    return Some((Box::new(message), publish.properties.unwrap_or_default()));
                 }
                 Err(e) => warn!("parse error({}) on: {}", e, message_str),
             }

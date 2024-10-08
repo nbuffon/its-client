@@ -145,9 +145,9 @@ impl TryFrom<&Properties> for MqttOptionWrapper {
 
         // FIXME manage ALPN, and authentication
         let tls_configuration = if use_tls {
-            let ca_path = get_mandatory_field::<String>("ca_path", ("mqtt", properties))
+            let ca_path = get_optional_from_section::<String>("ca_path", properties)
                 .expect("TLS enabled but no certificate path provided");
-            Some(configure_tls(&ca_path, None, None))
+            Some(configure_tls(ca_path, None, None))
         } else {
             None
         };

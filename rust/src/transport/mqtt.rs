@@ -43,26 +43,38 @@ pub(crate) fn configure_transport(
 }
 
 pub(crate) fn configure_tls(
-    ca_path: &str,
+    ca_path: Option<String>,
     alpn: Option<Vec<Vec<u8>>>,
     client_auth: Option<(Vec<u8>, Vec<u8>)>,
 ) -> TlsConfiguration {
-    let ca: Vec<u8> = std::fs::read(ca_path).expect("Failed to read TLS certificate");
+    if let Some(ca_path) = ca_path {
+        let ca: Vec<u8> = std::fs::read(ca_path).expect("Failed to read TLS certificate");
 
-    TlsConfiguration::Simple {
-        ca,
-        alpn,
-        client_auth,
+        TlsConfiguration::Simple {
+            ca,
+            alpn,
+            client_auth,
+        }
+    } else {
+        TlsConfiguration::default()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::transport::mqtt::configure_tls;
+    use rumqttc::TlsConfiguration;
 
     #[test]
     #[should_panic]
     fn configure_tls_with_invalid_path_should_return_error() {
-        let _ = configure_tls("unextisting/path", None, None);
+        let _ = configure_tls(Some("unextisting/path".to_string()), None, None);
+    }
+
+    #[test]
+    fn configure_default_tls() {
+        let tls = configure_tls(None, None, None);
+
+        assert!(matches!(tls, TlsConfiguration::Rustls(_)));
     }
 }

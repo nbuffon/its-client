@@ -51,7 +51,10 @@ fn http_exporter_from_configuration(configuration: &TelemetryConfiguration) -> H
         let cert =
             reqwest::Certificate::from_pem(&buf).expect("Failed to create Certificate from file");
 
-        builder = builder.add_root_certificate(cert).tls_sni(true);
+        builder = builder
+            .add_root_certificate(cert)
+            .tls_sni(true)
+            // .danger_accept_invalid_certs(true);
     }
 
     let http_client = builder

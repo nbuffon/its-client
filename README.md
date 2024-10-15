@@ -19,22 +19,48 @@ We provide many packages into the same project.
 
 [ETSI.org][3] proposal of implementation using the [JSON][2] language (instead of ASN.1 by default).
 
-### Rust libits
+### Rust
 
 [![Build Status](https://github.com/Orange-OpenSource/its-client/workflows/Rust/badge.svg)][4]
 [![crates.io](https://img.shields.io/crates/v/its-client)](https://crates.io/crates/its-client)
 
 The Rust library to build a client.
 
-### Python its-client
+### Python
 
-[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-client.yml/badge.svg)][5]
+#### iot3
 
-A Python package to connect on ITS platform as a Passenger car (station type 5): 
-you'll share your position and receive alerts from your direct environment.
+Provides an abstraction of IoT3 for easy manipulation in Python.
+
+#### its-quadkeys
+
+[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-quadkeys.yml/badge.svg)][5]
+
+Usefull abstractions around quadtrees, suitable for the ITS clients.
+
+#### its-info
+
+[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-info.yml/badge.svg)][6]
+
+#### its-status
+
+[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-status.yml/badge.svg)][7]
+
+#### its-interqueuemanager
+
+[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-iqm.yml/badge.svg)][8]
+
+#### its-vehicle
+
+[![Build status](https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-vehicle.yml/badge.svg)][9]
+
 
 [1]: https://mqtt.org/
 [2]: https://www.json.org
 [3]: https://www.etsi.org/committee/its
 [4]: https://github.com/Orange-OpenSource/its-client/actions/workflows/rust.yml
-[5]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-client.yml
+[5]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-quadkeys.yml
+[6]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-info.yml
+[7]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-status.yml
+[8]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-iqm.yml
+[9]: https://github.com/Orange-OpenSource/its-client/actions/workflows/python_its-vehicle.yml

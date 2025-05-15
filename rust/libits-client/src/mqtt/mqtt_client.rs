@@ -12,6 +12,10 @@ use log::{debug, error, info, trace, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, QoS, SubscribeFilter};
 use std::time::Duration;
 
+use rumqttc::Transport;
+use rumqttc::TlsConfiguration;
+
+
 pub(crate) struct Client {
     client: AsyncClient,
 }

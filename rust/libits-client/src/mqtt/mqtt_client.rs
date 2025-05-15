@@ -91,7 +91,7 @@ fn orange_broker(
             }
         },
     }
-    mqtt_options.set_transport(Transport::Tls(TlsConfiguration::default()));
+    mqttoptions.set_transport(Transport::Tls(TlsConfiguration::default()));
     mqttoptions
 }
 

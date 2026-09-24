@@ -110,6 +110,7 @@ pub async fn bootstrap(mut ini: Ini) -> Result<Configuration, ConfigurationError
                     &b,
                     ini.delete(Some("mqtt")).unwrap_or_default(),
                 )?,
+                mqtt_out: None,
                 #[cfg(feature = "geo_routing")]
                 geo: GeoConfiguration::try_from(&pick_mandatory_section(
                     crate::client::configuration::geo_configuration::GEO_SECTION,

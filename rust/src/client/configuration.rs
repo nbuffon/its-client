@@ -54,6 +54,7 @@ const MQTT_SECTION: &str = "mqtt";
 #[derive(Clone, Debug, Default)]
 pub struct Configuration {
     pub mqtt: MqttConfiguration,
+    pub mqtt_out: Option<MqttConfiguration>,
     #[cfg(feature = "geo_routing")]
     pub geo: GeoConfiguration,
     #[cfg(feature = "telemetry")]
@@ -230,6 +231,7 @@ impl TryFrom<Ini> for Configuration {
                 MQTT_SECTION,
                 &mut ini_config,
             )?)?,
+            mqtt_out: None,
             #[cfg(feature = "geo_routing")]
             geo: GeoConfiguration::try_from(&pick_mandatory_section(
                 GEO_SECTION,
@@ -247,6 +249,15 @@ impl TryFrom<Ini> for Configuration {
             )?)?,
             custom_settings: None,
         };
+
+        if let Some(mqtt_pub_section) = ini_config.delete(Some("mqtt_pub")) {
+            match MqttConfiguration::try_from(&mqtt_pub_section) {
+                Ok(mqtt_pub_configuration) => {
+                    configuration.mqtt_out = Some(mqtt_pub_configuration);
+                },
+                Err(e) => (),
+            }
+        }
 
         #[cfg(feature = "identity")]
         override_with_identity(&mut ini_config, &mut configuration)?;

@@ -8,8 +8,7 @@
  *
  * Authors: see CONTRIBUTORS.md
  */
-
-use crate::client::application::analyzer::Analyzer;
+use crate::client::application::agnostic_analyzer::AgnosticAnalyzer;
 use crate::client::configuration::Configuration;
 use crate::exchange::Exchange;
 use crate::exchange::cause::Cause;
@@ -31,6 +30,8 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use serde::Deserialize;
+use serde_json::Value;
 
 /// Struct holding the result of the output exchanges filter thread initialization
 ///
@@ -59,7 +60,7 @@ type FilterPipes<T> = (
 /// [2]: Information
 /// [3]: JoinHandle
 type DispatchPipes<T> = (
-    Receiver<Packet<T, Exchange>>,
+    Receiver<Packet<T, Value>>,
     Receiver<(Packet<T, Exchange>, Option<Cause>)>,
     Receiver<Packet<T, Information>>,
     JoinHandle<()>,
@@ -71,7 +72,7 @@ pub async fn run<A, C, T>(
     sequence_number: Arc<RwLock<SequenceNumber>>,
     subscription_list: &[T],
 ) where
-    A: Analyzer<T, C>,
+    A: AgnosticAnalyzer<T, C>,
     T: Topic + 'static,
     C: Send + Sync + 'static,
 {
@@ -113,8 +114,13 @@ pub async fn run<A, C, T>(
                     match rx.recv() {
                         Ok(item) => {
                             for publish_item in analyser.analyze(item.clone()) {
-                                let cause = Cause::from_exchange(&(item.payload));
-                                if let Err(error) = tx.send((publish_item, cause)) {
+                                let no_cause = Cause {
+                                    m_type: "0".to_string(),
+                                    id: "0".to_string()
+                                };
+                                if let Err(error) = tx.send(
+                                    (publish_item, Some(no_cause))
+                                ) {
                                     error!("Stopped to send analyser: {error}");
                                     // break is not enough here as it only exits the for when we
                                     // need to exit the loop it is in, so use return instead
@@ -149,6 +155,11 @@ pub async fn run<A, C, T>(
             publish_monitoring_receiver,
         );
 
+        // if let Some(publish_configuration) =  configuration.mqtt_out {
+        //
+        // } else {
+        //
+        // }
         mqtt_client_publish(publish_item_receiver, &configuration).await;
 
         debug!("Start mqtt_client_listen_handler joining...");
@@ -304,16 +315,17 @@ async fn mqtt_client_subscribe<T: Topic>(topic_list: &[T], client: &mut MqttClie
     let topic_subscription_list: Vec<_> = topic_list
         .iter()
         .map(|t| {
-            format!(
-                "{}{}",
-                t,
-                // TODO challenge if we can switch to a standard GeoTopic (adding a uuid as last required part) to simplify the code
-                if t.to_string().contains(Information::TYPE) {
-                    "/#"
-                } else {
-                    "/+/#"
-                }
-            )
+            format!("{}/#", t)
+            // format!(
+            //     "{}{}",
+            //     t,
+            //     // TODO challenge if we can switch to a standard GeoTopic (adding a uuid as last required part) to simplify the code
+            //     if t.to_string().contains(Information::TYPE) {
+            //         "/#"
+            //     } else {
+            //         "/+/#"
+            //     }
+            // )
         })
         .collect();
 
@@ -400,7 +412,7 @@ where
                     info_topic if info_topic.to_string().contains(Information::TYPE) => {
                         router.add_route(info_topic.clone(), deserialize::<Information>);
                     }
-                    _ => router.add_route(topic.clone(), deserialize::<Exchange>),
+                    _ => router.add_route(topic.clone(), deserialize::<Value>),
                 }
             }
 
@@ -411,34 +423,34 @@ where
                             Some((topic, (reception, properties))) => {
                                 trace!("Topic: {topic}");
                                 // TODO use the From Trait
-                                if reception.is::<Exchange>() {
-                                    if let Ok(exchange) = reception.downcast::<Exchange>() {
-                                        let item = Packet {
-                                            topic,
-                                            payload: *exchange,
-                                            properties,
-                                        };
-                                        //assumed clone, we send to 2 channels
-                                        match monitoring_sender.send((item.clone(), None)) {
-                                            Ok(()) => trace!("MQTT monitoring sent"),
-                                            Err(error) => {
-                                                error!("Stopped to send mqtt monitoring: {error}");
-                                                // Use return instead of break as we need to exit
-                                                // the entire thread function, not just the loop
-                                                return;
-                                            }
-                                        }
-                                        match exchange_sender.send(item) {
-                                            Ok(()) => trace!("MQTT exchange sent"),
-                                            Err(error) => {
-                                                error!("Stopped to send mqtt exchange: {error}");
-                                                // Use return instead of break as we need to exit
-                                                // the entire thread function, not just the loop
-                                                return;
-                                            }
-                                        }
-                                    }
-                                } else if reception.is::<Information>() {
+                                // if reception.is::<Exchange>() {
+                                //     if let Ok(exchange) = reception.downcast::<Exchange>() {
+                                //         let item = Packet {
+                                //             topic,
+                                //             payload: *exchange,
+                                //             properties,
+                                //         };
+                                //         //assumed clone, we send to 2 channels
+                                //         match monitoring_sender.send((item.clone(), None)) {
+                                //             Ok(()) => trace!("MQTT monitoring sent"),
+                                //             Err(error) => {
+                                //                 error!("Stopped to send mqtt monitoring: {error}");
+                                //                 // Use return instead of break as we need to exit
+                                //                 // the entire thread function, not just the loop
+                                //                 return;
+                                //             }
+                                //         }
+                                //         match exchange_sender.send(item) {
+                                //             Ok(()) => trace!("MQTT exchange sent"),
+                                //             Err(error) => {
+                                //                 error!("Stopped to send mqtt exchange: {error}");
+                                //                 // Use return instead of break as we need to exit
+                                //                 // the entire thread function, not just the loop
+                                //                 return;
+                                //             }
+                                //         }
+                                //     }
+                                /*} else */if reception.is::<Information>() {
                                     if let Ok(information) = reception.downcast::<Information>() {
                                         match information_sender.send(Packet {
                                             topic,
@@ -455,7 +467,32 @@ where
                                         }
                                     }
                                 } else {
-                                    trace!("Unknown reception: {reception:?}");
+                                    if let Ok(value) = reception.downcast::<Value>() {
+                                        let item = Packet {
+                                            topic,
+                                            payload: *value,
+                                            properties,
+                                        };
+                                        // match monitoring_sender.send((item.clone(), None)) {
+                                        //     Ok(()) => trace!("MQTT monitoring sent"),
+                                        //     Err(error) => {
+                                        //         error!("Stopped to send mqtt monitoring: {error}");
+                                        //         // Use return instead of break as we need to exit
+                                        //         // the entire thread function, not just the loop
+                                        //         return;
+                                        //     }
+                                        // }
+                                        match exchange_sender.send(item) {
+                                            Ok(()) => trace!("MQTT exchange sent"),
+                                            Err(error) => {
+                                                error!("Stopped to send mqtt exchange: {error}");
+                                                // Use return instead of break as we need to exit
+                                                // the entire thread function, not just the loop
+                                                return;
+                                            }
+                                        }
+                                    }
+                                // trace!("Unknown reception: {reception:?}");
                                 }
                             }
                             None => trace!("No mqtt response to send"),

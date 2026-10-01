@@ -12,6 +12,7 @@
 use crate::client::configuration::Configuration;
 use crate::exchange::Exchange;
 use crate::transport::mqtt::topic::Topic;
+use crate::transport::mqtt::geo_topic::GeoTopic;
 use crate::transport::packet::Packet;
 
 use crate::exchange::sequence_number::SequenceNumber;
@@ -27,5 +28,5 @@ pub trait AgnosticAnalyzer<T: Topic, C> {
     where
         Self: Sized;
 
-    fn analyze(&mut self, packet: Packet<T, Value>) -> Vec<Packet<T, Exchange>>;
+    fn analyze(&mut self, packet: Packet<T, Value>) -> Vec<Packet<GeoTopic, Exchange>>;
 }

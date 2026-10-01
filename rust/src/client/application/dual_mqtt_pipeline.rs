@@ -19,6 +19,7 @@ use crate::transport::mqtt::mqtt_client::{MqttClient, listen};
 use crate::transport::mqtt::mqtt_router;
 use crate::transport::mqtt::mqtt_router::BoxedReception;
 use crate::transport::mqtt::topic::Topic;
+use crate::transport::mqtt::geo_topic::GeoTopic;
 use crate::transport::packet::Packet;
 use crate::transport::payload::Payload;
 use crossbeam_channel::{Receiver, unbounded};
@@ -141,7 +142,7 @@ pub async fn run<A, C, T>(
         drop(analyser_sender);
 
         let (publish_item_receiver, publish_monitoring_receiver, filter_handle) =
-            filter_thread::<T>(configuration.clone(), analyser_receiver);
+            filter_thread::<GeoTopic>(configuration.clone(), analyser_receiver);
 
         // assumed clone, only on the Arc, not on the RwLock
         let information_handle = information_thread(information.clone(), information_receiver);

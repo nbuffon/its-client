@@ -25,7 +25,6 @@ use crossbeam_channel::{Receiver, unbounded};
 use log::{debug, error, info, trace, warn};
 use rumqttc::v5::mqttbytes::v5::PublishProperties;
 use rumqttc::v5::{Event, EventLoop};
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
@@ -154,10 +153,9 @@ pub async fn run<A, C, T, OT>(
             publish_monitoring_receiver,
         );
 
-        let publish_mqtt_client = if let Some(pub_mqtt_configuration) = &configuration.mqtt_out {
-            let config = configuration.mqtt_out.clone().unwrap();
-            let (mut client, mut event_loop_out) = MqttClient::new(&config);
-            tokio::spawn(async move {
+        if let Some(pub_mqtt_configuration) = &configuration.mqtt_out {
+            let (client, mut event_loop_out) = MqttClient::new(&pub_mqtt_configuration);
+            let handle = tokio::spawn(async move {
                 info!("Publish event loop started");
                 let mut retry_delay = tokio::time::Duration::from_millis(1_000);
                 let max_retry_delay = tokio::time::Duration::from_millis(60_000);
@@ -180,18 +178,11 @@ pub async fn run<A, C, T, OT>(
                     }
                 }
             });
-            Some(client)
+            mqtt_client_publish(publish_item_receiver, &client).await;
+            handle.await.unwrap();
         } else {
-            None
-        };
-
-        if publish_mqtt_client.is_some() {
-            debug!("Starting MQTT publishing...");
-            mqtt_client_publish(publish_item_receiver, &publish_mqtt_client.unwrap()).await;
-        } else {
-            debug!("MQTT publishing disabled");
             mqtt_client_publish(publish_item_receiver, &subscription_mqtt_client).await;
-        }
+        };
 
         debug!("Start mqtt_client_listen_handler joining...");
         mqtt_client_listen_handle.await.unwrap();

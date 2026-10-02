@@ -12,14 +12,13 @@
 use crate::client::configuration::Configuration;
 use crate::exchange::Exchange;
 use crate::transport::mqtt::topic::Topic;
-use crate::transport::mqtt::geo_topic::GeoTopic;
 use crate::transport::packet::Packet;
 
 use crate::exchange::sequence_number::SequenceNumber;
-use std::sync::{Arc, RwLock};
 use serde_json::Value;
+use std::sync::{Arc, RwLock};
 
-pub trait AgnosticAnalyzer<T: Topic, C> {
+pub trait AgnosticAnalyzer<T: Topic, OT: Topic, C> {
     fn new(
         configuration: Arc<Configuration>,
         context: Arc<RwLock<C>>,
@@ -28,5 +27,5 @@ pub trait AgnosticAnalyzer<T: Topic, C> {
     where
         Self: Sized;
 
-    fn analyze(&mut self, packet: Packet<T, Value>) -> Vec<Packet<GeoTopic, Exchange>>;
+    fn analyze(&mut self, packet: Packet<T, Value>) -> Vec<Packet<OT, Exchange>>;
 }

@@ -9,7 +9,7 @@
  * Authors: see CONTRIBUTORS.md
  */
 
-pub mod analyzer;
-pub mod pipeline;
-pub mod dual_mqtt_pipeline;
 pub mod agnostic_analyzer;
+pub mod analyzer;
+pub mod dual_mqtt_pipeline;
+pub mod pipeline;

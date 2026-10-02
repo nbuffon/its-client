@@ -254,7 +254,7 @@ impl TryFrom<Ini> for Configuration {
             match MqttConfiguration::try_from(&mqtt_pub_section) {
                 Ok(mqtt_pub_configuration) => {
                     configuration.mqtt_out = Some(mqtt_pub_configuration);
-                },
+                }
                 Err(e) => (),
             }
         }

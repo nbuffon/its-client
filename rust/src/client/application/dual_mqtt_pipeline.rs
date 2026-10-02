@@ -19,20 +19,19 @@ use crate::transport::mqtt::mqtt_client::{MqttClient, listen};
 use crate::transport::mqtt::mqtt_router;
 use crate::transport::mqtt::mqtt_router::BoxedReception;
 use crate::transport::mqtt::topic::Topic;
-use crate::transport::mqtt::geo_topic::GeoTopic;
 use crate::transport::packet::Packet;
 use crate::transport::payload::Payload;
 use crossbeam_channel::{Receiver, unbounded};
 use log::{debug, error, info, trace, warn};
 use rumqttc::v5::mqttbytes::v5::PublishProperties;
 use rumqttc::v5::{Event, EventLoop};
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use serde::Deserialize;
-use serde_json::Value;
 
 /// Struct holding the result of the output exchanges filter thread initialization
 ///
@@ -67,14 +66,15 @@ type DispatchPipes<T> = (
     JoinHandle<()>,
 );
 
-pub async fn run<A, C, T>(
+pub async fn run<A, C, T, OT>(
     configuration: Arc<Configuration>,
     context: Arc<RwLock<C>>,
     sequence_number: Arc<RwLock<SequenceNumber>>,
     subscription_list: &[T],
 ) where
-    A: AgnosticAnalyzer<T, C>,
+    A: AgnosticAnalyzer<T, OT, C>,
     T: Topic + 'static,
+    OT: Topic + 'static,
     C: Send + Sync + 'static,
 {
     let thread_count = configuration.mobility.thread_count;
@@ -117,11 +117,9 @@ pub async fn run<A, C, T>(
                             for publish_item in analyser.analyze(item.clone()) {
                                 let no_cause = Cause {
                                     m_type: "0".to_string(),
-                                    id: "0".to_string()
+                                    id: "0".to_string(),
                                 };
-                                if let Err(error) = tx.send(
-                                    (publish_item, Some(no_cause))
-                                ) {
+                                if let Err(error) = tx.send((publish_item, Some(no_cause))) {
                                     error!("Stopped to send analyser: {error}");
                                     // break is not enough here as it only exits the for when we
                                     // need to exit the loop it is in, so use return instead
@@ -142,7 +140,7 @@ pub async fn run<A, C, T>(
         drop(analyser_sender);
 
         let (publish_item_receiver, publish_monitoring_receiver, filter_handle) =
-            filter_thread::<GeoTopic>(configuration.clone(), analyser_receiver);
+            filter_thread::<OT>(configuration.clone(), analyser_receiver);
 
         // assumed clone, only on the Arc, not on the RwLock
         let information_handle = information_thread(information.clone(), information_receiver);
@@ -156,12 +154,44 @@ pub async fn run<A, C, T>(
             publish_monitoring_receiver,
         );
 
-        // if let Some(publish_configuration) =  configuration.mqtt_out {
-        //
-        // } else {
-        //
-        // }
-        mqtt_client_publish(publish_item_receiver, &configuration).await;
+        let publish_mqtt_client = if let Some(pub_mqtt_configuration) = &configuration.mqtt_out {
+            let config = configuration.mqtt_out.clone().unwrap();
+            let (mut client, mut event_loop_out) = MqttClient::new(&config);
+            tokio::spawn(async move {
+                info!("Publish event loop started");
+                let mut retry_delay = tokio::time::Duration::from_millis(1_000);
+                let max_retry_delay = tokio::time::Duration::from_millis(60_000);
+
+                loop {
+                    match event_loop_out.poll().await {
+                        Ok(event) => {
+                            debug!("Publish event: {event:?}");
+                            // Reset retry delay on successful event
+                            retry_delay = tokio::time::Duration::from_millis(1_000);
+                        }
+                        Err(e) => {
+                            error!("Publish event loop error: {e:?}");
+                            info!("Retrying publish connection in {:?}", retry_delay);
+                            tokio::time::sleep(retry_delay).await;
+
+                            // Exponential backoff
+                            retry_delay = std::cmp::min(retry_delay * 2, max_retry_delay);
+                        }
+                    }
+                }
+            });
+            Some(client)
+        } else {
+            None
+        };
+
+        if publish_mqtt_client.is_some() {
+            debug!("Starting MQTT publishing...");
+            mqtt_client_publish(publish_item_receiver, &publish_mqtt_client.unwrap()).await;
+        } else {
+            debug!("MQTT publishing disabled");
+            mqtt_client_publish(publish_item_receiver, &subscription_mqtt_client).await;
+        }
 
         debug!("Start mqtt_client_listen_handler joining...");
         mqtt_client_listen_handle.await.unwrap();
@@ -337,38 +367,12 @@ async fn mqtt_client_subscribe<T: Topic>(topic_list: &[T], client: &mut MqttClie
 
 async fn mqtt_client_publish<T, P>(
     publish_item_receiver: Receiver<Packet<T, P>>,
-    configuration: &Configuration,
+    mqtt_client: &MqttClient,
 ) where
     T: Topic,
     P: Payload,
 {
     info!("Starting MQTT publishing thread...");
-
-    let config = configuration.mqtt_out.clone().unwrap();
-    let (mut client, mut event_loop_out) = MqttClient::new(&config);
-    tokio::spawn(async move {
-        info!("Publish event loop started");
-        let mut retry_delay = tokio::time::Duration::from_millis(1_000);
-        let max_retry_delay = tokio::time::Duration::from_millis(60_000);
-
-        loop {
-            match event_loop_out.poll().await {
-                Ok(event) => {
-                    debug!("Publish event: {event:?}");
-                    // Reset retry delay on successful event
-                    retry_delay = tokio::time::Duration::from_millis(1_000);
-                }
-                Err(e) => {
-                    error!("Publish event loop error: {e:?}");
-                    info!("Retrying publish connection in {:?}", retry_delay);
-                    tokio::time::sleep(retry_delay).await;
-
-                    // Exponential backoff
-                    retry_delay = std::cmp::min(retry_delay * 2, max_retry_delay);
-                }
-            }
-        }
-    });
 
     loop {
         match publish_item_receiver.recv() {
@@ -376,7 +380,7 @@ async fn mqtt_client_publish<T, P>(
                 debug!("Start packet publishing...");
                 debug!("Topic: {}", packet.topic);
                 debug!("Packet payload: {:?}", packet.payload);
-                client.publish(packet).await;
+                mqtt_client.publish(packet).await;
                 debug!("Packet published");
             }
             Err(recv_err) => {
@@ -451,7 +455,8 @@ where
                                 //             }
                                 //         }
                                 //     }
-                                /*} else */if reception.is::<Information>() {
+                                /*} else */
+                                if reception.is::<Information>() {
                                     if let Ok(information) = reception.downcast::<Information>() {
                                         match information_sender.send(Packet {
                                             topic,
@@ -493,7 +498,7 @@ where
                                             }
                                         }
                                     }
-                                // trace!("Unknown reception: {reception:?}");
+                                    // trace!("Unknown reception: {reception:?}");
                                 }
                             }
                             None => trace!("No mqtt response to send"),

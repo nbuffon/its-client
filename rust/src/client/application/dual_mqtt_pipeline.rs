@@ -348,26 +348,21 @@ async fn mqtt_client_publish<T, P>(
         info!("Starting MQTT publishing event loop...");
         tokio::spawn(async move {
             info!("Publish event loop started");
-            let mut retry_delay = tokio::time::Duration::from_millis(1_000);
-            let max_retry_delay = tokio::time::Duration::from_millis(60_000);
 
             loop {
                 match pub_event_loop.poll().await {
                     Ok(event) => {
                         debug!("Publish event: {event:?}");
-                        // Reset retry delay on successful event
-                        retry_delay = tokio::time::Duration::from_millis(1_000);
                     }
                     Err(e) => {
                         error!("Publish event loop error: {e:?}");
-                        info!("Retrying publish connection in {:?}", retry_delay);
-                        tokio::time::sleep(retry_delay).await;
-
-                        // Exponential backoff
-                        retry_delay = std::cmp::min(retry_delay * 2, max_retry_delay);
+                        info!("Exiting publishing event loop...");
+                        break;
                     }
                 }
             }
+
+            info!("Exiting MQTT publish event loop thread...");
         });
     }
 

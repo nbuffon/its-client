@@ -65,6 +65,10 @@ impl TryFrom<&Properties> for MqttConfiguration {
             mqtt_options.set_connection_timeout(connection_timeout);
         }
 
+        if let Ok(Some(keep_alive)) = get_optional_from_properties::<u16>("keep_alive", properties) {
+            mqtt_options.set_keep_alive(std::time::Duration::from_secs(keep_alive.into()));
+        }
+
         let use_tls = get_optional_from_properties::<bool>("use_tls", properties)
             .unwrap_or_default()
             .unwrap_or_default();

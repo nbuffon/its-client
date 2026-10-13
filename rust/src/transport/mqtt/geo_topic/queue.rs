@@ -16,6 +16,7 @@ use std::{fmt, hash, str};
 pub(crate) enum Queue {
     #[default]
     In,
+    Inter,
     Out,
 }
 
@@ -26,6 +27,7 @@ impl fmt::Display for Queue {
             "{}",
             match self {
                 Queue::In => "inQueue".to_string(),
+                Queue::Inter => "interQueue".to_string(),
                 Queue::Out => "outQueue".to_string(),
             }
         )
@@ -36,6 +38,7 @@ impl From<&str> for Queue {
     fn from(s: &str) -> Self {
         match s {
             "inQueue" => Queue::In,
+            "interQueue" => Queue::Inter,
             "outQueue" => Queue::Out,
             element => panic!(
                 "Unable to convert from the element {element} as a Queue, use from_str instead"
@@ -67,7 +70,7 @@ impl str::FromStr for Queue {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "inQueue" | "outQueue" => Ok(Queue::from(s)),
+            "inQueue" | "interQueue" | "outQueue" => Ok(Queue::from(s)),
             element => Err(GeoTopicError::UnknownQueue(element.to_string())),
         }
     }

@@ -80,16 +80,12 @@ thiserror = "2.0.20"
 threadpool = "1.8.1"
 flexi_logger = "0.31.10"
 rand = "0.10.2"
-tempfile = "3.27.0"
-axum = "0.8.9"
-anyhow = "1.0.104"
-flate2 = "1.1.9"
 
-[dependencies.tower-http]
+[dev-dependencies.tower-http]
 version = "0.7.0"
 features = ["fs", "cors"]
 
-[dependencies.rusqlite]
+[dev-dependencies.rusqlite]
 version = "0.40.2"
 features = ["bundled"]
 
@@ -143,13 +139,16 @@ version = "1.53.1"
 features = ["full", "macros"]
 
 [dev-dependencies]
+anyhow = "1.0.104"
+axum = "0.8.9"
 clap = "4.6.6"
 chrono = "0.4.45"
 criterion = "0.8.2"
+flate2 = "1.1.9"
 lazy_static = "1.5.0"
 timer = "0.2.0"
-flate2 = "1.1.9"
 tar = "0.4.46"
+tempfile = "3.27.0"
 
 [[bench]]
 name = "position"

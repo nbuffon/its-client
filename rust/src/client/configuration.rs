@@ -37,7 +37,6 @@ use crate::client::configuration::identity::override_with_identity;
 
 use crate::client::configuration::mqtt_configuration::MqttConfiguration;
 
-pub(crate) mod bootstrap_configuration;
 pub mod configuration_error;
 #[cfg(feature = "geo_routing")]
 pub(crate) mod geo_configuration;

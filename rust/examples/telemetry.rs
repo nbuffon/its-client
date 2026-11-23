@@ -15,7 +15,6 @@ use std::path::Path;
 use std::thread;
 
 use clap::{Arg, Command};
-use ini::Ini;
 use libits::client::configuration::Configuration;
 use libits::client::logger::create_stdout_logger;
 use libits::transport::telemetry::{execute_in_span, get_span, init_tracer};
@@ -76,19 +75,15 @@ async fn main() {
             Arg::new("config-file-path")
                 .short('c')
                 .long("config")
-                .default_value("examples/config.ini")
+                .default_value("examples/config.toml")
                 .value_name("CONFIG_FILE_PATH")
                 .help("Path to the configuration file"),
         )
         .get_matches();
 
-    let configuration = Configuration::try_from(
-        Ini::load_from_file(Path::new(
-            matches.get_one::<String>("config-file-path").unwrap(),
-        ))
-        .expect("Failed to load config file as Ini"),
-    )
-    .expect("Failed to create Configuration from loaded Ini");
+    let config_file_path = matches.get_one::<String>("config-file-path").unwrap();
+    let configuration = Configuration::try_from(Path::new(config_file_path))
+        .expect(format!("Failed to create Configuration from {}", config_file_path).as_str());
 
     let _logger = create_stdout_logger().expect("Logger initialization failed");
 

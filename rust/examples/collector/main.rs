@@ -14,7 +14,6 @@ mod collector_str_topic;
 use crate::collector_str_topic::CollectorStrTopic;
 use chrono::Local;
 use clap::{Arg, Command};
-use ini::Ini;
 use libits::client::configuration::Configuration;
 use libits::client::configuration::configuration_error::ConfigurationError;
 use libits::client::configuration::mqtt_configuration::MqttConfiguration;
@@ -49,7 +48,7 @@ async fn main() {
                 .short('c')
                 .long("config")
                 .value_name("CONFIG_FILE_PATH")
-                .default_value("examples/config.ini")
+                .default_value("examples/config.toml")
                 .help("Path to the configuration file"),
         )
         .get_matches();
@@ -57,13 +56,9 @@ async fn main() {
     // Initialize logger
     let _logger = create_stdout_logger().expect("Logger initialization failed");
     // Load and parse configuration file
-    let mut configuration = Configuration::try_from(
-        Ini::load_from_file(Path::new(
-            matches.get_one::<String>("config-file-path").unwrap(),
-        ))
-        .expect("Failed to load config file as Ini"),
-    )
-    .expect("Failed to create Configuration from loaded Ini");
+    let config_file_path = matches.get_one::<String>("config-file-path").unwrap();
+    let mut configuration = Configuration::try_from(Path::new(config_file_path))
+        .expect(format!("Failed to create Configuration from {}", config_file_path).as_str());
     configuration
         .mqtt
         .mqtt_options
@@ -391,7 +386,7 @@ impl TryFrom<&Configuration> for ReceiverConfiguration {
                         }
                     };
                 let route_level = configuration
-                    .get::<u8>(Some(RECEIVER_SECTION), "route_level")
+                    .get_integer::<u8>(Some(RECEIVER_SECTION), "route_level")
                     .ok();
                 if topic_list.is_empty() {
                     Ok(ReceiverConfiguration::default())
@@ -454,7 +449,7 @@ impl TryFrom<&Configuration> for ExporterConfiguration {
     fn try_from(configuration: &Configuration) -> Result<Self, Self::Error> {
         match &configuration.custom_settings {
             Some(custom_settings) => Ok(ExporterConfiguration {
-                stdout: match configuration.get::<bool>(Some(EXPORTER_SECTION), "stdout") {
+                stdout: match configuration.get_boolean(Some(EXPORTER_SECTION), "stdout") {
                     Ok(true) => Some(StdoutExporterConfiguration {}),
                     Ok(false) => None,
                     Err(e) => {
@@ -462,13 +457,13 @@ impl TryFrom<&Configuration> for ExporterConfiguration {
                         None
                     }
                 },
-                file: match configuration.get::<bool>(Some(EXPORTER_SECTION), "file") {
+                file: match configuration.get_boolean(Some(EXPORTER_SECTION), "file") {
                     Ok(true) => Some(FileExporterConfiguration {
                         directory: configuration
-                            .get::<String>(Some(EXPORTER_SECTION), "file_directory")
+                            .get_string(Some(EXPORTER_SECTION), "file_directory")
                             .unwrap_or("/data/collector".to_string()),
                         max_line_count: configuration
-                            .get(Some(EXPORTER_SECTION), "file_nb_line")
+                            .get_integer(Some(EXPORTER_SECTION), "file_nb_line")
                             .unwrap_or(10000),
                     }),
                     Ok(false) => None,
@@ -477,11 +472,19 @@ impl TryFrom<&Configuration> for ExporterConfiguration {
                         None
                     }
                 },
-                mqtt: match configuration.get::<bool>(Some(EXPORTER_SECTION), "mqtt") {
+                mqtt: match configuration.get_boolean(Some(EXPORTER_SECTION), "mqtt") {
                     Ok(true) => {
-                        let exporter_section = match custom_settings.section(Some(EXPORTER_SECTION))
-                        {
-                            Some(section) => section,
+                        let exporter_section = match custom_settings.get(EXPORTER_SECTION) {
+                            Some(section) => {
+                                if let Some(section) = section.as_table() {
+                                    section
+                                } else {
+                                    return Err(ConfigurationError::TypeError(
+                                        EXPORTER_SECTION,
+                                        "toml::Table",
+                                    ));
+                                }
+                            }
                             None => {
                                 info!(" Exporter mqtt not configured: no section found");
                                 return Err(ConfigurationError::NoCustomSettings);

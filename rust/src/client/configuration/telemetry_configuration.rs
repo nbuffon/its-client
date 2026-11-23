@@ -10,12 +10,14 @@
  */
 
 use base64::Engine;
-use ini::Properties;
 use log::warn;
 use std::string::ToString;
 
 use crate::client::configuration::configuration_error::ConfigurationError;
-use crate::client::configuration::{get_mandatory_from_properties, get_optional_from_properties};
+use crate::client::configuration::{
+    get_mandatory_boolean, get_mandatory_integer, get_mandatory_string, get_optional_integer,
+    get_optional_string,
+};
 
 pub(crate) const TELEMETRY_SECTION: &str = "telemetry";
 pub(crate) const DEFAULT_PATH: &str = "v1/traces";
@@ -57,12 +59,12 @@ impl TelemetryConfiguration {
     }
 }
 
-impl TryFrom<&Properties> for TelemetryConfiguration {
+impl TryFrom<&toml::Table> for TelemetryConfiguration {
     type Error = ConfigurationError;
 
-    fn try_from(properties: &Properties) -> Result<Self, Self::Error> {
+    fn try_from(properties: &toml::Table) -> Result<Self, Self::Error> {
         // optionals
-        let path = match get_optional_from_properties::<String>("path", properties) {
+        let path = match get_optional_string(None, "path", properties) {
             Ok(value) => value.unwrap_or(DEFAULT_PATH.to_string()),
             Err(e) => {
                 warn!(
@@ -72,7 +74,7 @@ impl TryFrom<&Properties> for TelemetryConfiguration {
             }
         };
 
-        let batch_size = match get_optional_from_properties::<usize>("batch_size", properties) {
+        let batch_size = match get_optional_integer::<usize>(None, "batch_size", properties) {
             Ok(value) => value.unwrap_or(2048),
             Err(e) => {
                 if let ConfigurationError::TypeError(_, _) = e {
@@ -82,19 +84,18 @@ impl TryFrom<&Properties> for TelemetryConfiguration {
             }
         };
 
-        let (username, password) =
-            match get_optional_from_properties::<String>("username", properties)? {
-                Some(username) => {
-                    let password = get_optional_from_properties::<String>("password", properties)?;
-                    (Some(username), password)
-                }
-                None => (None, None),
-            };
+        let (username, password) = match get_optional_string(None, "username", properties)? {
+            Some(username) => {
+                let password = get_optional_string(None, "password", properties)?;
+                (Some(username), password)
+            }
+            None => (None, None),
+        };
 
         let s = TelemetryConfiguration {
-            host: get_mandatory_from_properties::<String>("host", properties)?,
-            port: get_mandatory_from_properties::<u16>("port", properties)?,
-            use_tls: get_mandatory_from_properties::<bool>("use_tls", properties)?,
+            host: get_mandatory_string(None, "host", properties)?,
+            port: get_mandatory_integer::<u16>(None, "port", properties)?,
+            use_tls: get_mandatory_boolean(None, "use_tls", properties)?,
             path,
             batch_size,
             username,
@@ -107,21 +108,19 @@ impl TryFrom<&Properties> for TelemetryConfiguration {
 #[cfg(test)]
 mod test {
     use crate::client::configuration::telemetry_configuration::TelemetryConfiguration;
-    use ini::Ini;
+    use std::str::FromStr;
 
     const EXHAUSTIVE_TELEMETRY_CONF: &str = r#"
-[telemetry]
 host="tel.emetry.com"
 port=1234
 use_tls=false
 path="unusual/v1/traces"
 batch_size=4096
-username=username
-password=password
+username="username"
+password="password"
 "#;
 
     const MINIMAL_TELEMETRY_CONF: &str = r#"
-[telemetry]
 host="tele.metry.com"
 port=443
 use_tls=true
@@ -129,14 +128,12 @@ use_tls=true
 
     #[test]
     fn values_are_read_from_conf() {
-        let ini =
-            Ini::load_from_str(EXHAUSTIVE_TELEMETRY_CONF).expect("Failed to load string as Ini");
-
-        let telemetry_conf =
-            TelemetryConfiguration::try_from(ini.section(Some("telemetry")).unwrap());
+        let toml = toml::Table::from_str(EXHAUSTIVE_TELEMETRY_CONF).expect("Failed to parse toml");
+        let telemetry_conf = TelemetryConfiguration::try_from(&toml);
 
         let telemetry_conf =
             telemetry_conf.expect("Failed to create TelemetryConfiguration from config");
+
         assert_eq!("tel.emetry.com", telemetry_conf.host);
         assert_eq!(1234, telemetry_conf.port);
         assert!(!telemetry_conf.use_tls);
@@ -148,13 +145,12 @@ use_tls=true
 
     #[test]
     fn default_values() {
-        let ini = Ini::load_from_str(MINIMAL_TELEMETRY_CONF).expect("Failed to load string as Ini");
-
-        let telemetry_conf =
-            TelemetryConfiguration::try_from(ini.section(Some("telemetry")).unwrap());
+        let toml = toml::Table::from_str(MINIMAL_TELEMETRY_CONF).expect("Failed to parse toml");
+        let telemetry_conf = TelemetryConfiguration::try_from(&toml);
 
         let telemetry_conf =
             telemetry_conf.expect("Failed to create TelemetryConfiguration from config");
+
         assert_eq!("tele.metry.com", telemetry_conf.host);
         assert_eq!(443, telemetry_conf.port);
         assert!(telemetry_conf.use_tls);

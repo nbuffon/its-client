@@ -17,11 +17,19 @@ mod stats;
 
 use anyhow::{Result, ensure};
 use clap::{Arg, Command};
-use ini::Ini;
 use libits::client::logger::create_stdout_logger;
+use serde::Deserialize;
+use std::fs::read_to_string;
 use std::path::Path;
 
 const DISPLAY_SECTION: &str = "display";
+
+#[derive(Deserialize)]
+struct Display {
+    pub db_path: String,
+    pub _zoom: u8,
+    pub port: u32,
+}
 
 //noinspection HttpUrlsUsage
 #[tokio::main]
@@ -36,47 +44,49 @@ async fn main() -> Result<()> {
                 .short('c')
                 .long("config")
                 .value_name("CONFIG_FILE_PATH")
-                .default_value("examples/config.ini")
+                .default_value("examples/config.toml")
                 .help("Path to the configuration file"),
         )
         .get_matches();
 
     let config_path = matches.get_one::<String>("config-file-path").unwrap();
-    let ini = Ini::load_from_file(Path::new(config_path))
-        .unwrap_or_else(|error| panic!("Failed to load config file {}: {}", config_path, error));
+    let toml_config = match read_to_string(Path::new(config_path)) {
+        Ok(toml_string) => match toml::from_str::<toml::Table>(&toml_string) {
+            Ok(toml) => toml,
+            Err(e) => {
+                panic!("Failed to load config file as TOML: {:?}", e);
+            }
+        },
+        Err(e) => {
+            panic!("Failed to read config file: {:?}", e);
+        }
+    };
+    let display_section = toml::Table::try_from(
+        toml_config
+            .get(DISPLAY_SECTION)
+            .expect(format!("Missing mandatory section {}", DISPLAY_SECTION).as_str()),
+    )
+    .expect(format!("{} must be a section", DISPLAY_SECTION).as_str());
 
-    // The server only needs the display-specific settings, so read the [display]
-    // section directly instead of requiring the full library configuration (which
-    // would mandate unrelated [mqtt]/[mobility] sections).
-    let display_section = ini
-        .section(Some(DISPLAY_SECTION))
-        .expect("Missing [display] section in config file");
-
-    let db_path = display_section
-        .get("db_path")
-        .expect("Missing 'db_path' in [display] section")
-        .to_string();
-
-    let port: u16 = display_section
-        .get("port")
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(3000);
+    let display_config = display_section
+        .try_into::<Display>()
+        .expect("Failed to parse display config");
 
     ensure!(
-        Path::new(&db_path).try_exists()?,
+        Path::new(&display_config.db_path).try_exists()?,
         "Database not found: {}. Run 'display_log_reader' or 'display_mqtt_reader' first.",
-        db_path
+        display_config.db_path
     );
 
     // Print database stats on startup
-    stats::check_database(&db_path)?;
+    stats::check_database(&display_config.db_path)?;
 
-    let app = server::create_router(&db_path);
-    let bind_address = format!("0.0.0.0:{}", port);
+    let app = server::create_router(&display_config.db_path);
+    let bind_address = format!("0.0.0.0:{}", display_config.port);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     println!(
         "🚀 Server running on http://{} (DB: {})",
-        bind_address, db_path
+        bind_address, display_config.db_path
     );
     println!("📍 Open your browser and navigate to the URL above");
     axum::serve(listener, app).await?;

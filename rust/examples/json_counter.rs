@@ -14,13 +14,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use clap::{Arg, Command};
-use ini::Ini;
 use libits::client::configuration::Configuration;
 use libits::client::logger::create_stdout_logger;
 use libits::transport::mqtt::mqtt_client::MqttClient;
 use libits::transport::mqtt::mqtt_router::MqttRouter;
 use libits::transport::mqtt::str_topic::StrTopic;
-use log::{error, info};
+use log::{debug, error, info};
 use rumqttc::{Publish, PublishProperties};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -33,7 +32,7 @@ async fn main() {
             Arg::new("config-file-path")
                 .short('c')
                 .long("config")
-                .default_value("examples/config.ini")
+                .default_value("examples/config.toml")
                 .value_name("CONFIG_FILE_PATH")
                 .help("Path to the configuration file"),
         )
@@ -41,13 +40,12 @@ async fn main() {
 
     let _logger = create_stdout_logger().expect("Logger initialization failed");
 
-    let mut configuration = Configuration::try_from(
-        Ini::load_from_file(Path::new(
-            matches.get_one::<String>("config-file-path").unwrap(),
-        ))
-        .expect("Failed to load config file as Ini"),
-    )
-    .expect("Failed to create Configuration from loaded Ini");
+    let config_file_path = matches.get_one::<String>("config-file-path").unwrap();
+    let mut configuration = Configuration::try_from(Path::new(config_file_path))
+        .expect(format!("Failed to create Configuration from {}", config_file_path).as_str());
+
+    debug!("Configuration: {:#?}", configuration);
+
     configuration
         .mqtt
         .mqtt_options

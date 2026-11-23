@@ -11,9 +11,11 @@
 
 use crate::client::configuration::configuration_error::ConfigurationError;
 use crate::client::configuration::configuration_error::ConfigurationError::NoPassword;
-use crate::client::configuration::{get_mandatory_from_properties, get_optional_from_properties};
+use crate::client::configuration::{
+    get_mandatory_integer, get_mandatory_string, get_optional_boolean, get_optional_integer,
+    get_optional_string,
+};
 use crate::transport::mqtt::configure_transport;
-use ini::Properties;
 use rumqttc::MqttOptions;
 use std::ops::Deref;
 
@@ -31,7 +33,7 @@ impl Default for MqttConfiguration {
     }
 }
 
-impl TryFrom<&Properties> for MqttConfiguration {
+impl TryFrom<&toml::Table> for MqttConfiguration {
     type Error = ConfigurationError;
 
     /// Tries to create an `MqttConfiguration` from the given properties.
@@ -43,45 +45,40 @@ impl TryFrom<&Properties> for MqttConfiguration {
     /// # Returns
     ///
     /// A result containing the `MqttConfiguration` or an error.
-    fn try_from(properties: &Properties) -> Result<Self, Self::Error> {
-        let host = get_mandatory_from_properties::<String>("host", properties)?;
-        let port = get_mandatory_from_properties::<u16>("port", properties)?;
+    fn try_from(properties: &toml::Table) -> Result<Self, Self::Error> {
+        let host = get_mandatory_string(None, "host", properties)?;
+        let port = get_mandatory_integer::<u16>(None, "port", properties)?;
         let mut mqtt_options = MqttOptions::new(
-            get_mandatory_from_properties::<String>("client_id", properties)?,
+            get_mandatory_string(None, "client_id", properties)?,
             (host, port),
         );
         let max_packet_size =
-            get_optional_from_properties::<u32>("max_packet_size", properties)?.unwrap_or(10_000);
+            get_optional_integer::<u32>(None, "max_packet_size", properties)?.unwrap_or(10_000);
         mqtt_options.set_max_packet_size(Some(max_packet_size));
 
-        if let Ok(Some(username)) = get_optional_from_properties::<String>("username", properties) {
-            if let Ok(Some(password)) =
-                get_optional_from_properties::<String>("password", properties)
-            {
+        if let Ok(Some(username)) = get_optional_string(None, "username", properties) {
+            if let Ok(Some(password)) = get_optional_string(None, "password", properties) {
                 mqtt_options.set_credentials(username, password);
             } else {
                 return Err(NoPassword);
             }
         }
         if let Ok(Some(connection_timeout)) =
-            get_optional_from_properties::<u64>("connection_timeout", properties)
+            get_optional_integer::<u64>(None, "connection_timeout", properties)
         {
             mqtt_options.set_connect_timeout(std::time::Duration::from_secs(connection_timeout));
         }
 
-        let use_tls = get_optional_from_properties::<bool>("use_tls", properties)
+        let use_tls = get_optional_boolean(None, "use_tls", properties)
             .unwrap_or_default()
             .unwrap_or_default();
-        let use_websocket = get_optional_from_properties::<bool>("use_websocket", properties)
+        let use_websocket = get_optional_boolean(None, "use_websocket", properties)
             .unwrap_or_default()
             .unwrap_or_default();
 
-        let ca_file =
-            get_optional_from_properties::<String>("ca_file", properties).unwrap_or_default();
-        let cert_file =
-            get_optional_from_properties::<String>("cert_file", properties).unwrap_or_default();
-        let key_file =
-            get_optional_from_properties::<String>("key_file", properties).unwrap_or_default();
+        let ca_file = get_optional_string(None, "ca_file", properties).unwrap_or_default();
+        let cert_file = get_optional_string(None, "cert_file", properties).unwrap_or_default();
+        let key_file = get_optional_string(None, "key_file", properties).unwrap_or_default();
 
         configure_transport(
             use_tls,
@@ -111,27 +108,26 @@ impl Deref for MqttConfiguration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::configuration::MQTT_SECTION;
-    use ini::Ini;
+    use std::str::FromStr;
 
-    /// Creates properties for testing.
-    ///
-    /// # Returns
-    ///
-    /// A `Properties` instance with test values.
-    fn create_properties() -> Properties {
-        let mut ini = Ini::new();
-        ini.with_section(Some(MQTT_SECTION))
-            .set("client_id", "test_client")
-            .set("host", "localhost")
-            .set("port", "1883");
-        ini.section(Some(MQTT_SECTION)).unwrap().clone()
+    macro_rules! load_toml_table {
+        ($str_conf: expr) => {
+            toml::Table::from_str($str_conf).expect("Failed to load TOML configuration")
+        };
     }
 
     #[test]
     fn mqtt_configuration_from_valid_properties() {
-        let properties = create_properties();
+        let properties = load_toml_table!(
+            r#"
+    client_id = "test_client"
+    host = "localhost"
+    port = 1883
+    "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert_eq!(config.mqtt_options.client_id(), "test_client");
         assert_eq!(
             format!(
@@ -145,18 +141,33 @@ mod tests {
 
     #[test]
     fn mqtt_configuration_missing_mandatory_fields() {
-        let mut properties = create_properties();
-        properties.remove("client_id");
+        let properties = load_toml_table!(
+            r#"
+            [mqtt]
+            host = "localhost"
+            port = "1883"
+        "#
+        );
+
         let result = MqttConfiguration::try_from(&properties);
+
         assert!(result.is_err());
     }
 
     #[test]
     fn mqtt_configuration_with_credentials() {
-        let mut properties = create_properties();
-        properties.insert("username", "user".to_string());
-        properties.insert("password", "pass".to_string());
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            username = "user"
+            password = "pass"
+        "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert_eq!(
             config.mqtt_options.auth(),
             &rumqttc::ConnectAuth::UsernamePassword {
@@ -168,18 +179,34 @@ mod tests {
 
     #[test]
     fn mqtt_configuration_missing_password() {
-        let mut properties = create_properties();
-        properties.insert("username", "user".to_string());
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            username = "user"
+        "#
+        );
+
         let result = MqttConfiguration::try_from(&properties);
+
         assert!(matches!(result, Err(NoPassword)));
     }
 
     #[test]
     fn mqtt_configuration_with_tls_and_websocket() {
-        let mut properties = create_properties();
-        properties.insert("use_tls", "true".to_string());
-        properties.insert("use_websocket", "true".to_string());
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            use_tls = true
+            use_websocket = true
+        "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert!(matches!(
             config.mqtt_options.transport(),
             rumqttc::Transport::Wss(_)
@@ -187,11 +214,19 @@ mod tests {
     }
 
     #[test]
-    fn mqtt_configuration_with_tls() {
-        let mut properties = create_properties();
-        properties.insert("use_tls", "true".to_string());
-        properties.insert("use_websocket", "false".to_string());
+    fn mqtt_configuration_with_tls_no_websocket() {
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            use_tls = true
+            use_websocket = false
+        "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert!(matches!(
             config.mqtt_options.transport(),
             rumqttc::Transport::Tls(_)
@@ -199,11 +234,19 @@ mod tests {
     }
 
     #[test]
-    fn mqtt_configuration_with_websocket() {
-        let mut properties = create_properties();
-        properties.insert("use_tls", "false".to_string());
-        properties.insert("use_websocket", "true".to_string());
+    fn mqtt_configuration_with_websocket_no_tls() {
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            use_tls = false
+            use_websocket = true
+        "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert!(matches!(
             config.mqtt_options.transport(),
             rumqttc::Transport::Ws
@@ -212,10 +255,18 @@ mod tests {
 
     #[test]
     fn mqtt_configuration_without_tls_and_websocket() {
-        let mut properties = create_properties();
-        properties.insert("use_tls", "false".to_string());
-        properties.insert("use_websocket", "false".to_string());
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+            use_tls = false
+            use_websocket = false
+        "#
+        );
+
         let config = MqttConfiguration::try_from(&properties).unwrap();
+
         assert!(matches!(
             config.mqtt_options.transport(),
             rumqttc::Transport::Tcp

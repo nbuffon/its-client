@@ -9,10 +9,10 @@
  * Authors: see CONTRIBUTORS.md
  */
 
-use ini::Properties;
-
 use crate::client::configuration::configuration_error::ConfigurationError;
-use crate::client::configuration::get_mandatory_from_properties;
+use crate::client::configuration::{
+    get_mandatory_boolean, get_mandatory_integer, get_mandatory_string,
+};
 
 pub(crate) const MOBILITY_SECTION: &str = "mobility";
 
@@ -30,18 +30,15 @@ pub struct MobilityConfiguration {
     pub thread_count: usize,
 }
 
-impl TryFrom<&Properties> for MobilityConfiguration {
+impl TryFrom<&toml::Table> for MobilityConfiguration {
     type Error = ConfigurationError;
 
-    fn try_from(properties: &Properties) -> Result<Self, Self::Error> {
+    fn try_from(properties: &toml::Table) -> Result<Self, Self::Error> {
         let s = MobilityConfiguration {
-            source_uuid: get_mandatory_from_properties(SOURCE_UUID_FIELD, properties)?,
-            station_id: get_mandatory_from_properties(STATION_ID_FIELD, properties)?,
-            use_responsibility: get_mandatory_from_properties(
-                USE_RESPONSIBILITY_FIELD,
-                properties,
-            )?,
-            thread_count: get_mandatory_from_properties(THREAD_COUNT_FIELD, properties)?,
+            source_uuid: get_mandatory_string(None, SOURCE_UUID_FIELD, properties)?,
+            station_id: get_mandatory_integer::<u32>(None, STATION_ID_FIELD, properties)?,
+            use_responsibility: get_mandatory_boolean(None, USE_RESPONSIBILITY_FIELD, properties)?,
+            thread_count: get_mandatory_integer::<usize>(None, THREAD_COUNT_FIELD, properties)?,
         };
         Ok(s)
     }

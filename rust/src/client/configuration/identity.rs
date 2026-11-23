@@ -12,10 +12,7 @@ use crate::client::configuration::configuration_error::ConfigurationError;
 use crate::client::configuration::configuration_error::ConfigurationError::{
     FileNotFound, InvalidFileType,
 };
-use crate::client::configuration::{
-    Configuration, get_mandatory_from_properties, pick_mandatory_section,
-};
-use ini::Ini;
+use crate::client::configuration::{Configuration, get_mandatory_string, pick_mandatory_section};
 use log::{info, warn};
 use serde::Deserialize;
 use std::fs;
@@ -50,12 +47,12 @@ struct Identity {
 ///   }
 ///   ```
 pub(crate) fn override_with_identity(
-    ini_configuration: &mut Ini,
+    toml_configuration: &mut toml::Table,
     configuration: &mut Configuration,
 ) -> Result<(), ConfigurationError> {
-    match pick_mandatory_section("identity", ini_configuration) {
+    match pick_mandatory_section("identity", toml_configuration) {
         Ok(identity) => {
-            let file_name = get_mandatory_from_properties::<String>("file", &identity)?;
+            let file_name = get_mandatory_string(None, "file", &identity)?;
 
             match fs::read_to_string(&file_name) {
                 Ok(json_str) => match serde_json::from_str::<Identity>(&json_str) {
@@ -103,18 +100,19 @@ pub(crate) fn override_with_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ini::Ini;
+    use std::str::FromStr;
 
     #[test]
     fn missing_section_returns_ok() {
         let ini_str = r#"
         [not_identity]
-        file=/dev/null        
+        file="/dev/null"
         "#;
-        let mut ini_cfg = Ini::load_from_str(ini_str).unwrap();
+        let mut toml_cfg =
+            toml::Table::from_str(ini_str).expect("Failed to create TOM configuration");
         let mut configuration = Configuration::default();
 
-        let result = override_with_identity(&mut ini_cfg, &mut configuration);
+        let result = override_with_identity(&mut toml_cfg, &mut configuration);
 
         assert!(result.is_ok());
     }

@@ -10,8 +10,7 @@
  */
 
 use crate::client::configuration::configuration_error::ConfigurationError;
-use crate::client::configuration::get_mandatory_from_properties;
-use ini::Properties;
+use crate::client::configuration::get_mandatory_string;
 
 pub(crate) const GEO_SECTION: &str = "geo";
 
@@ -33,13 +32,13 @@ pub struct GeoConfiguration {
     pub suffix: String,
 }
 
-impl TryFrom<&Properties> for GeoConfiguration {
+impl TryFrom<&toml::Table> for GeoConfiguration {
     type Error = ConfigurationError;
 
-    fn try_from(properties: &Properties) -> Result<Self, Self::Error> {
+    fn try_from(properties: &toml::Table) -> Result<Self, Self::Error> {
         Ok(Self {
-            prefix: get_mandatory_from_properties::<String>("prefix", properties)?,
-            suffix: get_mandatory_from_properties::<String>("suffix", properties)?,
+            prefix: get_mandatory_string(None, "prefix", properties)?,
+            suffix: get_mandatory_string(None, "suffix", properties)?,
         })
     }
 }

@@ -1,21 +1,21 @@
 # bootstrap settings
 #[bootstrap]
-#host = mydomain.com
+#host = "mydomain.com"
 #port = 8080
-#path = /bootstrap
-#role = external-app
-#username = username
-#password = password
+#path = "/bootstrap"
+#role = "external-app"
+#username = "username"
+#password = "password"
 
 # Reads service credentials from file
 # It will override the username and password fields provided in the other section if they are present
 [identity]
-file = /etc/identity.json
+file = "/etc/identity.json"
 
 # mqtt settings
 [mqtt]
 # broker host to connect to
-host = test.mosquitto.org
+host = "test.mosquitto.org"
 # broker port to connect to
 port = 8886
 # true to use the TLS protocol
@@ -23,25 +23,25 @@ use_tls = true
 # true to use the WebSocket protocol
 use_websocket = false
 # client id to provide at the connection
-client_id = com_app_its-client-1
+client_id = "com_app_its-client-1"
 # optional, connection timeout
 connection_timeout = 60
 # optional, ACL username
-#username = username
+#username = "username"
 # optional, ACL password
-#password = password
+#password = "password"
 
 # geo_routing feature settings
 [geo]
 # prefix to use as MQTT topic root
-prefix = default
+prefix = "default"
 # the suffix to use as MQTT road id
-suffix = v2x
+suffix = "v2x"
 
 # mobility feature settings
 [mobility]
 # UUID to use as source identifier
-source_uuid = com_app_its-client-1
+source_uuid = "com_app_its-client-1"
 # station_id to use as source identifier
 station_id = 1
 # true to enable the responsibility
@@ -52,19 +52,19 @@ thread_count = 4
 # telemetry feature settings
 [telemetry]
 # telemetry server to connect to
-host = localhost
+host = "localhost"
 #  telemetry port to connect to
 port = 4318
 # true to use the TLS protocol
 use_tls = false
 # optional, path of the request, default to 'v1/traces'
-#path = custom/v1/traces
+#path = "custom/v1/traces"
 # optional, max batch size, default to 2048
 #max_batch_size = 10
 # optional, basic auth username
-#username = username
+#username = "username"
 # optional, basic auth password
-#password = password
+#password = "password"
 
 # receiver settings
 [receiver]
@@ -88,7 +88,7 @@ use_tls = false
 # optional, true to export the received messages to a mqtt broker, default to false
 #mqtt = true
 # broker host to export to
-host = test.mosquitto.org
+host = "test.mosquitto.org"
 # broker port is the port to export to
 port = 1883
 # true to use the TLS protocol
@@ -96,22 +96,22 @@ use_tls = false
 # true to use the MQTT WebSocket protocol
 use_websocket = false
 # client id to provide at the connection
-client_id = com_app_its-exporter-1
+client_id = "com_app_its-exporter-1"
 # optional, connection timeout
 #connection_timeout = 60
 # optional, maximum MQTT packet size in bytes (incoming and outgoing), default to 10000
 #max_packet_size = 262144
 # optional, ACL username
-#username = username
+#username = "username"
 # optional, ACL password
-#password = password
+#password = "password"
 # optional, list of topic level to update with its new value. e.g. "1=default","2=exporter"
-topic_level_update_list = "1=collector"
+topic_level_update_list = ["1=collector"]
 
 # display example custom settings
 [display]
 # path to the SQLite database
-db_path = /tmp/display.db
+db_path = "/tmp/display.db"
 # quadkey zoom (ingestor only)
 zoom = 26
 # web server port (server only)

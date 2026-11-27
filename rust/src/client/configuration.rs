@@ -62,13 +62,6 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    // FIXME this should be in MqttConfiguration
-    pub fn set_mqtt_credentials(&mut self, username: &str, password: &str) {
-        self.mqtt
-            .mqtt_options
-            .set_credentials(username.to_string(), password.as_bytes().to_vec());
-    }
-
     pub fn get_integer<T: TryFrom<i64>>(
         &self,
         section: Option<&'static str>,
@@ -688,23 +681,6 @@ use_tls = false
         let result = configuration.get_list::<u32>(Some("test"), "list_field");
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn set_mqtt_credentials_test() {
-        let toml = load_toml_table!(EXHAUSTIVE_CUSTOM_CONFIG);
-        let mut configuration =
-            Configuration::try_from(toml).expect("Failed to create configuration");
-
-        configuration.set_mqtt_credentials("testuser", "testpass");
-
-        assert_eq!(
-            configuration.mqtt.mqtt_options.auth(),
-            &rumqttc::ConnectAuth::UsernamePassword {
-                username: "testuser".to_string(),
-                password: "testpass".to_string().into(),
-            }
-        );
     }
 
     // -- Configuration creation

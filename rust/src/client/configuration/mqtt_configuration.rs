@@ -25,6 +25,13 @@ pub struct MqttConfiguration {
     pub mqtt_options: MqttOptions,
 }
 
+impl MqttConfiguration {
+    pub fn set_mqtt_credentials(&mut self, username: &str, password: &str) {
+        self.mqtt_options
+            .set_credentials(username.to_string(), password.as_bytes().to_vec());
+    }
+}
+
 impl Default for MqttConfiguration {
     fn default() -> Self {
         Self {
@@ -271,5 +278,27 @@ mod tests {
             config.mqtt_options.transport(),
             rumqttc::Transport::Tcp
         ));
+    }
+
+    #[test]
+    fn set_mqtt_credentials_test() {
+        let properties = load_toml_table!(
+            r#"
+            client_id = "test_client"
+            host = "localhost"
+            port = 1883
+        "#
+        );
+        let mut mqtt_configuration = MqttConfiguration::try_from(&properties).unwrap();
+
+        mqtt_configuration.set_mqtt_credentials("testuser", "testpass");
+
+        assert_eq!(
+            mqtt_configuration.mqtt_options.auth(),
+            &rumqttc::ConnectAuth::UsernamePassword {
+                username: "testuser".to_string(),
+                password: "testpass".to_string().into(),
+            }
+        );
     }
 }
